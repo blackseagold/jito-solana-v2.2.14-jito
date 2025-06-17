@@ -145,7 +145,7 @@ impl LatestValidatorVotesForFrozenBanks {
     }
 
     #[cfg(test)]
-    fn latest_vote(&self, pubkey: &Pubkey, is_replay_vote: bool) -> Option<&(Slot, Vec<Hash>)> {
+    pub fn latest_vote(&self, pubkey: &Pubkey, is_replay_vote: bool) -> Option<&(Slot, Vec<Hash>)> {
         let vote_map = if is_replay_vote {
             &self.max_replay_frozen_votes
         } else {
