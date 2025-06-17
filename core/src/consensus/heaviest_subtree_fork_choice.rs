@@ -21,7 +21,7 @@ use {
             btree_set::Iter, hash_map::Entry, BTreeMap, BTreeSet, HashMap, HashSet, VecDeque,
         },
         sync::{Arc, RwLock},
-        time::Instant,
+        time::{Duration, Instant},
     },
 };
 
@@ -290,6 +290,13 @@ impl HeaviestSubtreeForkChoice {
 
         // Process missed slots in batches
         const BATCH_SIZE: usize = 5;
+        // Use a timer so that processing large numbers of missed slots does not
+        // stall the replay thread for long periods of time.  Instead of
+        // sleeping after each batch, periodically yield to the scheduler so
+        // other work can make progress.
+        const YIELD_MS: u64 = 100;
+        let mut last_yield = Instant::now();
+
         for batch in missed_slots.chunks(BATCH_SIZE) {
             let mut vote_slots = Vec::with_capacity(batch.len());
             let mut vote_hashes = Vec::with_capacity(batch.len());
@@ -360,8 +367,13 @@ impl HeaviestSubtreeForkChoice {
                 }
             }
 
-            // Allow some time between batches
-            std::thread::sleep(std::time::Duration::from_millis(100));
+            // Occasionally yield to allow the replay thread to process other
+            // work.  This avoids long pauses when backfilling many slots
+            // while still making steady progress on tower updates.
+            if last_yield.elapsed() >= Duration::from_millis(YIELD_MS) {
+                std::thread::yield_now();
+                last_yield = Instant::now();
+            }
         }
 
         Ok(())
