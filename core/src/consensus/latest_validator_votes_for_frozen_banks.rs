@@ -16,26 +16,39 @@ pub struct LatestValidatorVotesForFrozenBanks {
 
 impl LatestValidatorVotesForFrozenBanks {
     //NIK'S MOD BEGIN
-    pub fn has_voted_for_this_or_descendant(&self, slot: Slot) -> bool {
-        // Check if any validator has a vote for this slot in max_gossip_frozen_votes
-        for (_, &(vote_slot, _)) in &self.max_gossip_frozen_votes {
+    pub fn has_voted_for_this_or_descendant(
+        &self,
+        slot: Slot,
+        bank_forks: &solana_runtime::bank_forks::BankForks,
+    ) -> bool {
+        // Look for any vote that either directly references `slot` or
+        // references a descendant of `slot` by walking the ancestry of all
+        // known voted slots.
+
+        let check_vote = |vote_slot: Slot| -> bool {
             if vote_slot == slot {
+                return true;
+            }
+
+            if let Some(vote_bank) = bank_forks.get(vote_slot) {
+                return vote_bank.ancestors.contains_key(&slot);
+            }
+
+            false
+        };
+
+        for &(_pk, (vote_slot, _)) in self.max_gossip_frozen_votes.values() {
+            if check_vote(vote_slot) {
                 return true;
             }
         }
 
-        // Check if any validator has a vote for this slot in max_replay_frozen_votes
-        for (_, &(vote_slot, _)) in &self.max_replay_frozen_votes {
-            if vote_slot == slot {
+        for &(_pk, (vote_slot, _)) in self.max_replay_frozen_votes.values() {
+            if check_vote(vote_slot) {
                 return true;
             }
         }
 
-        // We can't access fork_choice_dirty_set directly because it's private,
-        // so we'll just check the two public collections, which should catch most cases
-
-        // A more comprehensive check would also search for descendants
-        // but that would require having access to the ancestry information
         false
     }
     //NIK'S MOD END

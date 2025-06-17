@@ -267,7 +267,9 @@ impl HeaviestSubtreeForkChoice {
                 let slot_hash_key = (slot, bank.hash());
 
                 // Skip if we've already voted on this fork
-                if latest_validator_votes_for_frozen_banks.has_voted_for_this_or_descendant(slot) {
+                if latest_validator_votes_for_frozen_banks
+                    .has_voted_for_this_or_descendant(slot, &*bank_forks_r)
+                {
                     continue;
                 }
 
