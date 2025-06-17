@@ -1637,9 +1637,15 @@ mod test {
         super::*,
         crate::vote_simulator::VoteSimulator,
         itertools::Itertools,
-        solana_runtime::{bank::Bank, bank_utils},
-        solana_sdk::{hash::Hash, slot_history::SlotHistory},
-        std::{collections::HashSet, ops::Range},
+        //NIK's MOD BEGIN
+        solana_runtime::{bank::Bank, bank_forks::BankForks, bank_utils},
+        solana_sdk::{hash::Hash, slot_history::SlotHistory, pubkey::Pubkey},
+        std::{
+            collections::HashSet,
+            ops::Range,
+            sync::{Arc, RwLock},
+        },
+        //NIK'S MOD END
         trees::tr,
     };
 
@@ -4831,4 +4837,96 @@ mod test {
             );
         }
     }
+
+    //NIK's MOD BEGIN
+    #[test]
+    fn test_process_missed_votes_backfills_slots() {
+        let stake = 10;
+        let (genesis_bank, vote_pubkeys) =
+            bank_utils::setup_bank_and_vote_pubkeys_for_tests(1, stake);
+        let vote_pubkey = vote_pubkeys[0];
+
+        let bank_forks = BankForks::new_rw_arc(genesis_bank);
+        for slot in 1..=15 {
+            let parent = bank_forks.read().unwrap().get(slot - 1).unwrap();
+            let bank = Bank::new_from_parent(parent, &Pubkey::default(), slot);
+            bank.fill_bank_with_ticks_for_tests();
+            bank.set_block_id(Some(Hash::new_unique()));
+            bank.freeze();
+            bank_forks.write().unwrap().insert(bank);
+        }
+
+        let mut heaviest_subtree_fork_choice =
+            HeaviestSubtreeForkChoice::new_from_bank_forks(bank_forks.clone());
+        let current_bank = bank_forks.read().unwrap().get(15).unwrap();
+        let mut tower = Tower::default();
+        let mut latest_votes = LatestValidatorVotesForFrozenBanks::default();
+
+        heaviest_subtree_fork_choice
+            .process_missed_votes(
+                &bank_forks,
+                &vote_pubkey,
+                &mut tower,
+                &mut latest_votes,
+                &current_bank,
+            )
+            .unwrap();
+
+        assert_eq!(tower.last_voted_slot(), Some(5));
+        assert_eq!(
+            latest_votes
+                .latest_vote(&vote_pubkey, true)
+                .unwrap()
+                .0,
+            5
+        );
+    }
+
+    #[test]
+    fn test_process_missed_votes_no_new_votes() {
+        let stake = 10;
+        let (genesis_bank, vote_pubkeys) =
+            bank_utils::setup_bank_and_vote_pubkeys_for_tests(1, stake);
+        let vote_pubkey = vote_pubkeys[0];
+
+        let bank_forks = BankForks::new_rw_arc(genesis_bank);
+        for slot in 1..=15 {
+            let parent = bank_forks.read().unwrap().get(slot - 1).unwrap();
+            let bank = Bank::new_from_parent(parent, &Pubkey::default(), slot);
+            bank.fill_bank_with_ticks_for_tests();
+            bank.set_block_id(Some(Hash::new_unique()));
+            bank.freeze();
+            bank_forks.write().unwrap().insert(bank);
+        }
+
+        let mut heaviest_subtree_fork_choice =
+            HeaviestSubtreeForkChoice::new_from_bank_forks(bank_forks.clone());
+        let current_bank = bank_forks.read().unwrap().get(15).unwrap();
+        let mut tower = Tower::default();
+        let mut latest_votes = LatestValidatorVotesForFrozenBanks::default();
+
+        let bank5 = bank_forks.read().unwrap().get(5).unwrap();
+        latest_votes.check_add_vote(vote_pubkey, 5, Some(bank5.hash()), true);
+        tower.record_bank_vote(&bank5);
+
+        heaviest_subtree_fork_choice
+            .process_missed_votes(
+                &bank_forks,
+                &vote_pubkey,
+                &mut tower,
+                &mut latest_votes,
+                &current_bank,
+            )
+            .unwrap();
+
+        assert_eq!(tower.last_voted_slot(), Some(5));
+        assert_eq!(
+            latest_votes
+                .latest_vote(&vote_pubkey, true)
+                .unwrap()
+                .0,
+            5
+        );
+    }
+    //NIK'S MOD END
 }
