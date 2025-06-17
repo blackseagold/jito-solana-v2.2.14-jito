@@ -37,13 +37,13 @@ impl LatestValidatorVotesForFrozenBanks {
             false
         };
 
-        for &(_pk, (vote_slot, _)) in self.max_gossip_frozen_votes.values() {
+        for (_, &(vote_slot, _)) in self.max_gossip_frozen_votes.iter() {
             if check_vote(vote_slot) {
                 return true;
             }
         }
 
-        for &(_pk, (vote_slot, _)) in self.max_replay_frozen_votes.values() {
+        for (_, &(vote_slot, _)) in self.max_replay_frozen_votes.iter() {
             if check_vote(vote_slot) {
                 return true;
             }
