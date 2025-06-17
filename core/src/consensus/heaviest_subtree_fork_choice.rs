@@ -338,13 +338,6 @@ impl HeaviestSubtreeForkChoice {
                 );
 
                 // Update tower with new votes
-                //tower.record_vote(last_slot, last_hash);
-                // tower.record_bank_vote_and_update_lockouts(
-                //     last_slot,
-                //     last_hash,
-                //     true,
-                //     Hash::default(),
-                // );
                 if let Some(vote_bank) = bank_forks_r.get(last_slot) {
                     // Get block_id using the same approach as record_bank_vote
                     let block_id = vote_bank.block_id().unwrap_or_else(|| Hash::default());
